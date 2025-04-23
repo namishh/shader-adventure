@@ -29,30 +29,32 @@ float vignette(vec2 uv) {
     return 1.0 - (uv.x * uv.x + uv.y * uv.y) * vignetteStrength;
 }
 
-vec3 createSun(vec2 uv, float time) {
+vec3 createSun(vec2 uv) {
     float aspect = u_resolution.x / u_resolution.y;
-    vec2 center = vec2(0.5);
+    vec2 center = vec2(0.5, 0.5 + 0.08);
     vec2 adjustedUV = vec2((uv.x - 0.5) * aspect + 0.5, uv.y);
     float dist = distance(adjustedUV, center);
-    float sunSize = 0.2;
+    float sunSize = 0.24;
     float sunMask = step(dist, sunSize);
     
     if (uv.y < center.y && sunMask > 0.5) {
-        float chordOffsets[5];
+        float chordOffsets[6];
         chordOffsets[0] = 0.0;
         chordOffsets[1] = 0.04;
         chordOffsets[2] = 0.08;
         chordOffsets[3] = 0.12;
         chordOffsets[4] = 0.16;
+        chordOffsets[5] = 0.2;
         
-        float chordThicknesses[5];
+        float chordThicknesses[6];
         chordThicknesses[0] = 0.005;
         chordThicknesses[1] = 0.006;
         chordThicknesses[2] = 0.007;
         chordThicknesses[3] = 0.008;
         chordThicknesses[4] = 0.009;
+        chordThicknesses[5] = 0.01;
 
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 6; i++) {
             float chordY = center.y - chordOffsets[i];
             if (abs(uv.y - chordY) < chordThicknesses[i]) {
                 float y_dist = abs(chordY - center.y);
@@ -75,6 +77,7 @@ vec3 createSun(vec2 uv, float time) {
     return sunColor * sunMask;
 }
 
+
 void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution.xy;
     
@@ -83,7 +86,7 @@ void main() {
     
     vec3 bgColor = mix(bg1color, bg2color, uv.y);
 
-    vec3 sunColor = createSun(uv, u_time);
+    vec3 sunColor = createSun(uv);
     bgColor = mix(bgColor, sunColor, sunColor.r);
 
     if (uv.y > 0.4) {
@@ -120,3 +123,4 @@ void main() {
     
     gl_FragColor = vec4(bgColor, 1.0);
 }
+
