@@ -29,6 +29,32 @@ float vignette(vec2 uv) {
     return 1.0 - (uv.x * uv.x + uv.y * uv.y) * vignetteStrength;
 }
 
+vec3 createSun(vec2 uv, float time) {
+    vec2 center = vec2(0.5, 0.5);
+    // Adjust UV coordinates to account for aspect ratio
+    vec2 adjustedUV = uv;
+    float aspect = u_resolution.x / u_resolution.y;
+    adjustedUV.x *= aspect;
+    vec2 adjustedCenter = center;
+    adjustedCenter.x *= aspect;
+    
+    float dist = distance(adjustedUV, adjustedCenter);
+    
+    float sunSize = 0.2;
+    
+    float sunMask = smoothstep(sunSize, sunSize - 0.002, dist);
+    
+    vec3 yellowColor = vec3(1.0, 0.9, 0.2);
+    vec3 pinkColor = vec3(0.98, 0.2, 0.8);
+    
+    float gradientFactor = (uv.y - (center.y - sunSize)) / (2.0 * sunSize);
+    gradientFactor = clamp(gradientFactor, 0.0, 1.0);
+    
+    vec3 sunColor = mix(yellowColor, pinkColor, gradientFactor);
+    
+    return sunColor * sunMask;
+}
+
 void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution.xy;
     
@@ -36,8 +62,11 @@ void main() {
     vec3 bg2color = vec3(0.3, 0.0, 0.5);
     
     vec3 bgColor = mix(bg1color, bg2color, uv.y);
-    
-    if (uv.y > 0.5) {
+
+    vec3 sunColor = createSun(uv, u_time);
+    bgColor = mix(bgColor, sunColor, sunColor.r);
+
+    if (uv.y > 0.4) {
         float cellSize = 100.0;
         vec2 gridCoord = floor(uv * vec2(cellSize, cellSize * 0.5));
         vec2 cellUv = fract(uv * vec2(cellSize, cellSize * 0.5));
@@ -49,14 +78,17 @@ void main() {
         
         float r = random(gridCoord + 2.0);
         
-        if (r > 0.97) {
+        if (r > 0.6) {
             float dist = distance(cellUv, cellCenter);
             float starSize = 0.06;
             float star = smoothstep(starSize, starSize - 0.01, dist);
             
             float twinkleEffect = twinkle(gridCoord, u_time);
             
-            bgColor += vec3(0.6 * star * twinkleEffect);
+            float distToCenter = distance(uv, vec2(0.5, 0.5));
+            float sunInfluence = smoothstep(0.25, 0.4, distToCenter);
+            
+            bgColor += vec3(0.6 * star * twinkleEffect * sunInfluence);
         }
     }
     
