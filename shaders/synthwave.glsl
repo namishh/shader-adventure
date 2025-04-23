@@ -30,26 +30,46 @@ float vignette(vec2 uv) {
 }
 
 vec3 createSun(vec2 uv, float time) {
-    vec2 center = vec2(0.5, 0.5);
-    // Adjust UV coordinates to account for aspect ratio
-    vec2 adjustedUV = uv;
     float aspect = u_resolution.x / u_resolution.y;
-    adjustedUV.x *= aspect;
-    vec2 adjustedCenter = center;
-    adjustedCenter.x *= aspect;
-    
-    float dist = distance(adjustedUV, adjustedCenter);
-    
+    vec2 center = vec2(0.5);
+    vec2 adjustedUV = vec2((uv.x - 0.5) * aspect + 0.5, uv.y);
+    float dist = distance(adjustedUV, center);
     float sunSize = 0.2;
+    float sunMask = step(dist, sunSize);
     
-    float sunMask = smoothstep(sunSize, sunSize - 0.002, dist);
+    if (uv.y < center.y && sunMask > 0.5) {
+        float chordOffsets[5];
+        chordOffsets[0] = 0.0;
+        chordOffsets[1] = 0.04;
+        chordOffsets[2] = 0.08;
+        chordOffsets[3] = 0.12;
+        chordOffsets[4] = 0.16;
+        
+        float chordThicknesses[5];
+        chordThicknesses[0] = 0.005;
+        chordThicknesses[1] = 0.006;
+        chordThicknesses[2] = 0.007;
+        chordThicknesses[3] = 0.008;
+        chordThicknesses[4] = 0.009;
+
+        for (int i = 0; i < 5; i++) {
+            float chordY = center.y - chordOffsets[i];
+            if (abs(uv.y - chordY) < chordThicknesses[i]) {
+                float y_dist = abs(chordY - center.y);
+                float x_dist = sqrt(max(0.0, sunSize * sunSize - y_dist * y_dist)) + 0.2;
+                float x_min = center.x - x_dist / aspect;
+                float x_max = center.x + x_dist / aspect;
+                if (uv.x >= x_min && uv.x <= x_max) {
+                    sunMask = 0.0;
+                    break;
+                }
+            }
+        }
+    }
     
     vec3 yellowColor = vec3(1.0, 0.9, 0.2);
     vec3 pinkColor = vec3(0.98, 0.2, 0.8);
-    
-    float gradientFactor = (uv.y - (center.y - sunSize)) / (2.0 * sunSize);
-    gradientFactor = clamp(gradientFactor, 0.0, 1.0);
-    
+    float gradientFactor = clamp((uv.y - (center.y - sunSize)) / (2.0 * sunSize), 0.0, 1.0);
     vec3 sunColor = mix(yellowColor, pinkColor, gradientFactor);
     
     return sunColor * sunMask;
