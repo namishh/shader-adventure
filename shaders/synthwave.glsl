@@ -39,12 +39,23 @@ vec3 createSun(vec2 uv) {
     
     if (uv.y < center.y && sunMask > 0.5) {
         float chordOffsets[6];
-        chordOffsets[0] = 0.0;
-        chordOffsets[1] = 0.04;
-        chordOffsets[2] = 0.08;
-        chordOffsets[3] = 0.12;
-        chordOffsets[4] = 0.16;
-        chordOffsets[5] = 0.2;
+        float baseOffsets[6];
+        baseOffsets[0] = 0.0;
+        baseOffsets[1] = 0.04;
+        baseOffsets[2] = 0.08;
+        baseOffsets[3] = 0.12;
+        baseOffsets[4] = 0.16;
+        baseOffsets[5] = 0.2;
+        
+        float panSpeed = 0.25; 
+        float panOffset = fract(u_time * panSpeed); 
+        float maxOffset = 0.25; 
+        for (int i = 0; i < 6; i++) {
+            chordOffsets[i] = baseOffsets[i] + panOffset * maxOffset;
+            if (chordOffsets[i] > maxOffset) {
+                chordOffsets[i] -= maxOffset;
+            }
+        }
         
         float chordThicknesses[6];
         chordThicknesses[0] = 0.005;
@@ -76,7 +87,6 @@ vec3 createSun(vec2 uv) {
     
     return sunColor * sunMask;
 }
-
 
 void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution.xy;
