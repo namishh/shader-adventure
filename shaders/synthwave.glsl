@@ -2,12 +2,16 @@ precision mediump float;
 uniform vec2 u_resolution;
 uniform float u_time;
 
-#define MAX_STEPS 100
-#define MAX_DIST 100.0
-#define SURF_DIST 0.001
+#define INTENSITY 0.3 
+#define GRID_LINE_WIDTH 0.0001
+#define SUN_INTENSITY 1.2
 
 float random(vec2 st) {
     return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+}
+
+float round(float x) {
+    return floor(x + 0.5);
 }
 
 float twinkle(vec2 gridCoord, float time) {
@@ -33,91 +37,118 @@ float vignette(vec2 uv) {
     return 1.0 - (uv.x * uv.x + uv.y * uv.y) * vignetteStrength;
 }
 
-float sdSphere(vec3 p, float r) {
-    return length(p) - r;
-}
-
-float sdSunSlices(vec3 p, vec3 center, float radius) {
-    float result = sdSphere(p - center, radius);
+vec3 createSun(vec2 uv) {
+    float aspect = u_resolution.x / u_resolution.y;
+    vec2 center = vec2(0.5, 0.5 + 0.10);
+    vec2 adjustedUV = vec2((uv.x - 0.5) * aspect + 0.5, uv.y);
+    float dist = distance(adjustedUV, center);
+    float sunSize = 0.24;
+    float sunMask = step(dist, sunSize);
     
-    float panSpeed = 0.25;
-    float panOffset = fract(u_time * panSpeed);
-    float maxOffset = 0.25;
-    
-    float baseOffsets[6];
-    baseOffsets[0] = 0.0;
-    baseOffsets[1] = 0.04;
-    baseOffsets[2] = 0.08;
-    baseOffsets[3] = 0.12;
-    baseOffsets[4] = 0.16;
-    baseOffsets[5] = 0.2;
-    
-    float chordThicknesses[6];
-    chordThicknesses[0] = 0.005;
-    chordThicknesses[1] = 0.006;
-    chordThicknesses[2] = 0.007;
-    chordThicknesses[3] = 0.008;
-    chordThicknesses[4] = 0.009;
-    chordThicknesses[5] = 0.01;
-    
-    if (p.y < center.y) {
+    if (uv.y < center.y && sunMask > 0.5) {
+        float chordOffsets[6];
+        float baseOffsets[6];
+        baseOffsets[0] = 0.0;
+        baseOffsets[1] = 0.04;
+        baseOffsets[2] = 0.08;
+        baseOffsets[3] = 0.12;
+        baseOffsets[4] = 0.16;
+        baseOffsets[5] = 0.2;
+        
+        float panSpeed = 0.25; 
+        float panOffset = fract(u_time * panSpeed); 
+        float maxOffset = 0.25; 
         for (int i = 0; i < 6; i++) {
-            float chordOffset = baseOffsets[i] + panOffset * maxOffset;
-            if (chordOffset > maxOffset) {
-                chordOffset -= maxOffset;
+            chordOffsets[i] = baseOffsets[i] + panOffset * maxOffset;
+            if (chordOffsets[i] > maxOffset) {
+                chordOffsets[i] -= maxOffset;
             }
-            
-            float sliceY = center.y - chordOffset;
-            float thickness = chordThicknesses[i];
-            
-            float sliceDist = abs(p.y - sliceY) - thickness;
-            
-            float y_dist = abs(sliceY - center.y);
-            float x_dist = sqrt(max(0.0, radius * radius - y_dist * y_dist)) + 0.2;
-            
-            if (abs(p.x - center.x) < x_dist) {
-                result = max(result, -sliceDist);
+        }
+        
+        float chordThicknesses[6];
+        chordThicknesses[0] = 0.005;
+        chordThicknesses[1] = 0.006;
+        chordThicknesses[2] = 0.007;
+        chordThicknesses[3] = 0.008;
+        chordThicknesses[4] = 0.009;
+        chordThicknesses[5] = 0.01;
+
+        for (int i = 0; i < 6; i++) {
+            float chordY = center.y - chordOffsets[i];
+            if (abs(uv.y - chordY) < chordThicknesses[i]) {
+                float y_dist = abs(chordY - center.y);
+                float x_dist = sqrt(max(0.0, sunSize * sunSize - y_dist * y_dist)) + 0.2;
+                float x_min = center.x - x_dist / aspect;
+                float x_max = center.x + x_dist / aspect;
+                if (uv.x >= x_min && uv.x <= x_max) {
+                    sunMask = 0.0;
+                    break;
+                }
             }
         }
     }
     
-    return result;
-}
-
-float sceneSDF(vec3 p) {
-    vec3 sunCenter = vec3(0.5, 0.5 + 0.08, 2.0);
-    float sunRadius = 0.24;
-    
-    return sdSunSlices(p, sunCenter, sunRadius);
-}
-
-float rayMarch(vec3 ro, vec3 rd) {
-    float dO = 0.0;
-    
-    for (int i = 0; i < MAX_STEPS; i++) {
-        vec3 p = ro + rd * dO;
-        float dS = sceneSDF(p);
-        dO += dS;
-        if (dO > MAX_DIST || dS < SURF_DIST) break;
-    }
-    
-    return dO;
-}
-
-vec3 getSunColor(vec3 p) {
-    vec3 sunCenter = vec3(0.5, 0.5 + 0.08, 2.0);
-    float sunRadius = 0.24;
-    
-    float gradientFactor = clamp((p.y - (sunCenter.y - sunRadius)) / (2.0 * sunRadius), 0.0, 1.0);
-    
     vec3 yellowColor = vec3(1.0, 0.9, 0.2);
     vec3 pinkColor = vec3(0.98, 0.2, 0.8);
+    float gradientFactor = clamp((uv.y - (center.y - sunSize)) / (2.0 * sunSize), 0.0, 1.0);
+    vec3 sunColor = mix(yellowColor, pinkColor, gradientFactor);
     
-    return mix(yellowColor, pinkColor, gradientFactor);
+    sunColor *= SUN_INTENSITY;
+    
+    return sunColor * sunMask;
 }
 
-vec3 createStars(vec2 uv, float time) {
-    vec3 stars = vec3(0.0);
+vec3 createGrid(vec2 p) {
+    vec3 gridcolor = vec3(0.1, 0.15, 0.31); 
+    vec3 linecolor = vec3(0.13, 0.31, 0.24);
+
+    vec2 q = vec2(p.x/p.y, 1.0/p.y);
+    
+    float offs = -0.9 * u_time;
+    q.y += offs;
+    
+    vec2 qh = vec2(q.x, round(q.y));
+    vec2 qv = vec2(round(q.x), q.y);
+    qh.y -= offs;
+    qv.y -= offs;
+    
+    vec2 ph = vec2(qh.x/qh.y, 1.0/qh.y);
+    vec2 pv = vec2(qv.x/qv.y, 1.0/qv.y);
+    
+    ph.y = min(ph.y, 0.0);
+    pv.y = min(pv.y, 0.0);
+    
+    float dh = length(p-ph);
+    float dv = length(p-pv);
+    
+    float eps = 0.01;
+    dh = max(dh - GRID_LINE_WIDTH * eps * abs(qh.y), 0.0);
+    dv = max(dv - GRID_LINE_WIDTH * eps * abs(qv.y), 0.0);
+    
+    gridcolor += linecolor * 0.001/(dh*dh+eps*eps) * INTENSITY * 0.5;
+    gridcolor += linecolor * 0.001/(dv*dv+eps*eps) * INTENSITY * 0.5;
+    
+    return gridcolor;
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+    
+    vec2 p = (uv * 2.0 - 1.0);
+    p.x *= u_resolution.x / u_resolution.y; 
+    
+    vec3 bg1color = vec3(0.57, 0.73, 0.92);
+    vec3 bg2color = vec3(0.3, 0.0, 0.5);
+    
+    vec3 bgColor = mix(bg1color, bg2color, uv.y);
+    
+    vec3 sunColor = createSun(uv);
+    bgColor = mix(bgColor, sunColor, sunColor.r);
+    
+    if (p.y < 0.0) {
+        vec3 gridColor = createGrid(p);
+        bgColor = gridColor; 
+    }
     
     if (uv.y > 0.4) {
         float cellSize = 100.0;
@@ -136,50 +167,19 @@ vec3 createStars(vec2 uv, float time) {
             float starSize = 0.06;
             float star = smoothstep(starSize, starSize - 0.01, dist);
             
-            float twinkleEffect = twinkle(gridCoord, time);
+            float twinkleEffect = twinkle(gridCoord, u_time);
             
             float distToCenter = distance(uv, vec2(0.5, 0.5));
             float sunInfluence = smoothstep(0.25, 0.4, distToCenter);
             
-            stars = vec3(0.6 * star * twinkleEffect * sunInfluence);
+            bgColor += vec3(0.6 * star * twinkleEffect * sunInfluence);
         }
     }
     
-    return stars;
-}
-
-void main() {
-    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
-    float aspect = u_resolution.x / u_resolution.y;
-    
-    vec3 bg1color = vec3(0.57, 0.73, 0.92);
-    vec3 bg2color = vec3(0.3, 0.0, 0.5);
-    vec3 bgColor = mix(bg1color, bg2color, uv.y);
-    
-    vec3 ro = vec3((uv.x - 0.5) * aspect + 0.5, uv.y, 0.0); 
-    vec3 rd = vec3(0.0, 0.0, 1.0); 
-    
-    float d = rayMarch(ro, rd);
-    
-    bool hitSun = d < MAX_DIST;
-    
-    vec2 originalUv = uv;
-    if (hitSun) {
-        vec3 p = ro + rd * d;
-        vec3 sunColor = getSunColor(p);
-        
-        bgColor = sunColor;
-    }
-    
-    if (!hitSun) {
-        vec3 starColor = createStars(originalUv, u_time);
-        bgColor += starColor;
-    }
-    
-    float scanlineEffect = scanline(originalUv, u_time);
+    float scanlineEffect = scanline(uv, u_time);
     bgColor *= scanlineEffect;
     
-    float vignetteEffect = vignette(originalUv);
+    float vignetteEffect = vignette(uv);
     bgColor *= vignetteEffect;
     
     gl_FragColor = vec4(bgColor, 1.0);
